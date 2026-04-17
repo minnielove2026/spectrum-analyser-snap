@@ -1,0 +1,6 @@
+[Desktop Entry]
+Type=Application
+Name=Spectrum Analyser
+Exec=spectrum-analyser
+Icon=${SNAP}/meta/gui/spectrum-analyser.png
+Categories=Games

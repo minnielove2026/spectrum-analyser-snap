@@ -1,0 +1,142 @@
+name: spectrum-analyser
+base: core22
+version: v0.2.0-alpha-master
+summary: Spectrum Analyser
+license: MIT
+description: |
+  Spectrum Analyser is a tool that is designed to help reverse engineer
+  ZX Spectrum games & programs.
+  It is a combination of an emulator, debugger & interactive disassembler.
+  Programs are loaded and run in the emulator and their state can be
+  inspected using the tools provided.
+grade: stable
+confinement: strict
+
+apps:
+  spectrum-analyser:
+    command: bin/launch
+    extensions: [gnome]
+    command-chain:
+      - snap/command-chain/alsa-launch
+    plugs:
+      - audio-playback
+      - audio-record
+      - home
+      - joystick
+      - mount-observe
+      - network
+      - network-bind
+      - removable-media
+
+layout:
+  /usr/lib/$SNAPCRAFT_ARCH_TRIPLET/alsa-lib:
+    bind: $SNAP/usr/lib/$SNAPCRAFT_ARCH_TRIPLET/alsa-lib
+  /usr/share/alsa:
+    bind: $SNAP/usr/share/alsa
+
+parts:
+  alsa-mixin:
+    plugin: dump
+    source: https://github.com/diddlesnaps/snapcraft-alsa.git
+    source-subdir: snapcraft-assets
+    build-packages:
+      - libasound2-dev
+    stage-packages:
+      - libasound2
+      - libasound2-plugins
+      - yad
+    stage:
+      - etc/asound.conf
+      - snap/command-chain/alsa-launch
+      - usr/bin/yad*
+      - usr/lib/$SNAPCRAFT_ARCH_TRIPLET/alsa-lib
+      - usr/lib/$SNAPCRAFT_ARCH_TRIPLET/libasound*
+      - usr/lib/$SNAPCRAFT_ARCH_TRIPLET/libdnsfile*
+      - usr/lib/$SNAPCRAFT_ARCH_TRIPLET/libFLAC*
+      - usr/lib/$SNAPCRAFT_ARCH_TRIPLET/libjack*
+      - usr/lib/$SNAPCRAFT_ARCH_TRIPLET/libpulse*
+      - usr/lib/$SNAPCRAFT_ARCH_TRIPLET/libsamplerate*
+      - usr/lib/$SNAPCRAFT_ARCH_TRIPLET/libspeex*
+      - usr/lib/$SNAPCRAFT_ARCH_TRIPLET/libvorbis*
+      - usr/lib/$SNAPCRAFT_ARCH_TRIPLET/pulseaudio
+
+  spectrum-analyser:
+    after: [alsa-mixin]
+    plugin: nil
+    source: https://github.com/TheGoodDoktor/8BitAnalysers.git
+    source-type: git
+    build-packages:
+      - build-essential
+      - cmake
+      - libasound2-dev
+      - libgl1-mesa-dev
+      - libx11-dev
+      - libxcursor-dev
+      - libxi-dev
+      - libxinerama-dev
+      - libxrandr-dev
+      - libxxf86vm-dev
+    override-build: |
+      set -eux
+
+      cmake -S Source/ZXSpectrum -B build -DCMAKE_BUILD_TYPE=Release
+      cmake --build build -j"${SNAPCRAFT_PARALLEL_BUILD_COUNT:-1}"
+
+      install -Dm755 build/bin/SpectrumAnalyser "$SNAPCRAFT_PART_INSTALL/SpectrumAnalyser"
+      install -Dm644 Data/SpectrumAnalyser/imgui.ini "$SNAPCRAFT_PART_INSTALL/imgui.ini"
+
+      # Current upstream ships these; the published snap did not, but it likely
+      # should have.
+      install -Dm644 Data/SpectrumAnalyser/RomInfo.json "$SNAPCRAFT_PART_INSTALL/RomInfo.json"
+      cp -a Data/SpectrumAnalyser/Lua "$SNAPCRAFT_PART_INSTALL/"
+      cp -a Data/SpectrumAnalyser/Fonts "$SNAPCRAFT_PART_INSTALL/"
+
+      # The published snap bundled a pre-generated GlobalConfig.json.
+      cat > "$SNAPCRAFT_PART_INSTALL/GlobalConfig.json" <<'EOF'
+      {
+          "BranchLinesDisplayMode": 1,
+          "EditLuaBaseFiles": false,
+          "EnableAudio": false,
+          "EnableLua": false,
+          "Font": "",
+          "FontSizePixels": 13,
+          "ImageScale": 1,
+          "LastGame": "",
+          "LuaBaseFiles": [
+              "Lua/LuaBase.lua",
+              "Lua/ViewerBase.lua",
+              "Lua/ZXBase.lua"
+          ],
+          "NumberMode": 2,
+          "PokesFolder": "./Pokes/",
+          "RZXFolder": "./RZX/",
+          "ShowOpcodeValues": false,
+          "ShowScanlineIndicator": false,
+          "SnapshotFolder": "./SpectrumGames/",
+          "WorkspaceRoot": "./SpectrumAnalyserProjects/"
+      }
+      EOF
+
+      install -Dm755 /dev/stdin "$SNAPCRAFT_PART_INSTALL/bin/launch" <<'EOF'
+      #!/bin/bash
+      set -e
+
+      for f in imgui.ini GlobalConfig.json RomInfo.json; do
+        if [ -e "$SNAP/$f" ] && [ ! -e "$SNAP_USER_DATA/$f" ]; then
+          cp "$SNAP/$f" "$SNAP_USER_DATA/$f"
+        fi
+      done
+
+      for d in SpectrumGames SpectrumAnalyserProjects Pokes RZX; do
+        mkdir -p "$SNAP_USER_DATA/$d"
+      done
+
+      for d in Lua Fonts; do
+        if [ -d "$SNAP/$d" ] && [ ! -e "$SNAP_USER_DATA/$d" ]; then
+          cp -a "$SNAP/$d" "$SNAP_USER_DATA/$d"
+        fi
+      done
+
+      cd "$SNAP_USER_DATA"
+      exec "$SNAP/SpectrumAnalyser" "$@"
+      EOF

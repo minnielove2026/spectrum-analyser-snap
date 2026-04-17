@@ -1,0 +1,16 @@
+#!/bin/bash -x 
+
+for f in imgui.ini GlobalConfig.json; do
+  if ! test -f "$SNAP_USER_DATA"/"$f"; then
+    cp "$SNAP"/"$f" "$SNAP_USER_DATA"/"$f"
+  fi
+done
+
+for d in SpectrumGames SpectrumAnalyserProjects Pokes RZX; do
+  if [ ! -d "$SNAP_USER_DATA"/"$d" ]; then
+    mkdir -p "$SNAP_USER_DATA"/"$d"
+  fi
+done
+
+cd "$SNAP_USER_DATA"
+"$SNAP"/SpectrumAnalyser "$@"
