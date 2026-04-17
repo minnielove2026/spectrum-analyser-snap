@@ -1,0 +1,53 @@
+name: Snap
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  # Allow manual trigger
+  workflow_dispatch:
+  # Weekly build to stay reasonably current with upstream
+  schedule:
+    - cron: '0 4 * * 1'
+
+jobs:
+  build:
+    name: Build snap
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout snap repo
+        uses: actions/checkout@v4
+
+      - name: Build snap
+        id: build
+        uses: snapcore/action-build@v1
+
+      - name: Upload snap artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: spectrum-analyser-snap
+          path: '*.snap'
+          if-no-files-found: error
+
+  publish:
+    name: Publish to Snap Store (edge)
+    needs: build
+    runs-on: ubuntu-latest
+    # Only publish on pushes to main (not PRs, not forks)
+    if: github.event_name != 'pull_request' && github.repository == 'popey/spectrum-analyser-snap'
+
+    steps:
+      - name: Download snap artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: spectrum-analyser-snap
+
+      - name: Publish to edge channel
+        uses: snapcore/action-publish@v1
+        env:
+          SNAPCRAFT_STORE_CREDENTIALS: ${{ secrets.SNAPCRAFT_STORE_CREDENTIALS }}
+        with:
+          snap: ${{ needs.build.outputs.snap }}
+          release: edge
